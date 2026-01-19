@@ -429,7 +429,6 @@ export default function Home() {
         columnStyles: { 0: { cellWidth: 320 }, 1: { cellWidth: 160 } },
       });
 
-      // @ts-expect-error jspdf-autotable attaches lastAutoTable
       return (doc as any).lastAutoTable?.finalY ?? opts.startY + 60;
     }
 
