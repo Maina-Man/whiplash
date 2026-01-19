@@ -651,25 +651,40 @@ const notSeenArtists = useMemo(() => {
       )}
 
       <header style={{ ...styles.header, ...(isMobile ? styles.headerMobile : null) }}>
-        <div>
-          <div style={styles.title}>Whiplash</div>
-        </div>
+        <div style={styles.headerCenterTitle}>Whiplash</div>
 
-        <div style={{ ...styles.headerRight, ...(isMobile ? styles.headerRightMobile : null) }}>
-          <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={exportProgress} disabled={!data}>
+        <div
+          style={{
+            ...styles.headerActions,
+            ...(isMobile ? styles.headerActionsMobile : null),
+          }}
+        >
+          <button
+            style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }}
+            onClick={exportProgress}
+            disabled={!data}
+          >
             Save progress
           </button>
-          <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={clickResumeUpload}>
+
+          <button
+            style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }}
+            onClick={clickResumeUpload}
+          >
             Resume
           </button>
-          <a href="/api/auth/login" style={styles.link}>
-            Re-login
-          </a>
-          <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={scanSpotify} disabled={loadingScan}>
-            Scan Spotify
+
+          <button
+            style={{ ...styles.btnYes, ...(isMobile ? styles.smallBtnMobile : null) }}
+            onClick={scanSpotify}
+            disabled={loadingScan}
+          >
+            Connect
           </button>
         </div>
       </header>
+
+
 
       {error && (
         <div style={styles.card}>
@@ -1032,47 +1047,67 @@ function Th({
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    padding: 20,
     fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
     background: "#0b0b0f",
     color: "#fff",
-    overflowX: "hidden",     // ✅ key
+
+    width: "100%",
+    maxWidth: "100vw",
+    overflowX: "hidden",
     boxSizing: "border-box",
   },
+
   header: {
-    display: "flex",
-    justifyContent: "space-between",
+    display: "grid",
+    gridTemplateColumns: "1fr auto 1fr",
+    alignItems: "center",
     gap: 12,
-    alignItems: "flex-start",
     marginBottom: 16,
+  },
+
+  headerCenterTitle: {
+    gridColumn: 2,
+    justifySelf: "center",
+    fontSize: 22,
+    fontWeight: 900,
+    letterSpacing: -0.3,
+  },
+
+  headerActions: {
+    gridColumn: 3,
+    justifySelf: "end",
+    display: "flex",
+    gap: 10,
     flexWrap: "wrap",
   },
+
+  // Mobile: actions become a full-width 2-column grid under the centered title
+  headerActionsMobile: {
+    gridColumn: "1 / -1",
+    justifySelf: "stretch",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 8,
+    marginTop: 10,
+  },
+
 
   headerMobile: {
     position: "sticky",
     top: 0,
     zIndex: 50,
     padding: 12,
-    marginLeft: -12,   // ✅ match the mobile padding you set in <main>
-    marginRight: -12,  // ✅
-    marginTop: -12,
     marginBottom: 12,
     background: "rgba(11,11,15,0.85)",
     backdropFilter: "blur(10px)",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
   },
 
+
+
   title: { fontSize: 22, fontWeight: 900, letterSpacing: -0.3 },
   subtitle: { opacity: 0.8, marginTop: 4, fontSize: 13 },
-  headerRight: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" },
 
-  headerRightMobile: {
-    width: "100%",
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 8,
-    alignItems: "stretch",
-  },
   link: { color: "#9ad", textDecoration: "none", fontSize: 13 },
 
   modeBar: {
@@ -1150,8 +1185,8 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "0 auto",
   },
   cardBig: {
-    width: "min(820px, 100%)",
-    maxWidth: "100%",
+    width: "100%",
+    maxWidth: 820,
     borderRadius: 22,
     padding: 18,
     border: "1px solid rgba(255,255,255,0.14)",
@@ -1159,7 +1194,9 @@ const styles: Record<string, React.CSSProperties> = {
       "linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))",
     boxShadow: "0 10px 40px rgba(0,0,0,0.45)",
     margin: "0 auto",
+    boxSizing: "border-box",
   },
+
 
   h1: { fontSize: 20, fontWeight: 900, letterSpacing: -0.2 },
 
