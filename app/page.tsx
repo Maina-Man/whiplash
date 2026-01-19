@@ -232,12 +232,48 @@ export default function Home() {
 
   // Alphabetical deck order A->Z
   const deckArtistsSorted = useMemo(() => {
-    const arr = [...(data?.artists ?? [])];
+    const src = data?.artists ?? [];
+
+    // Dedupe by artistId (keep the largest trackCount, and keep image/name)
+    const byId = new Map<string, ArtistDeckItem>();
+
+    for (const a of src) {
+      const prev = byId.get(a.artistId);
+      if (!prev) {
+        byId.set(a.artistId, a);
+      } else {
+        // keep best info
+        byId.set(a.artistId, {
+          artistId: a.artistId,
+          artistName: prev.artistName || a.artistName,
+          imageUrl: prev.imageUrl || a.imageUrl,
+          trackCount: Math.max(prev.trackCount ?? 0, a.trackCount ?? 0),
+        });
+      }
+    }
+
+    const arr = Array.from(byId.values());
     arr.sort((a, b) =>
       a.artistName.localeCompare(b.artistName, undefined, { sensitivity: "base" })
     );
     return arr;
   }, [data]);
+
+
+  type DoneSortKey = "artistName" | "seenMark" | "trackCount" | "playlistCount";
+
+  const [doneSortKey, setDoneSortKey] = useState<DoneSortKey>("artistName");
+  const [doneSortDir, setDoneSortDir] = useState<"asc" | "desc">("asc");
+
+  function toggleDoneSort(k: DoneSortKey) {
+    if (k === doneSortKey) setDoneSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setDoneSortKey(k);
+      // default direction: numbers desc, name asc
+      setDoneSortDir(k === "artistName" ? "asc" : "desc");
+    }
+  }
+
 
   const artistMetaById = useMemo(() => {
     const m = new Map<string, { trackCount: number; playlistCount: number }>();
@@ -260,6 +296,7 @@ export default function Home() {
   }, [deckArtistsSorted, table]);
 
   type DoneRow = {
+    artistId: string;
     artistName: string;
     seenMark: "✓" | "✗";
     trackCount: number;
@@ -276,6 +313,7 @@ export default function Home() {
       const mark: "✓" | "✗" = seen ? "✓" : "✗";
 
       return {
+        artistId: a.artistId,
         artistName: a.artistName,
         seenMark: mark,
         trackCount: meta?.trackCount ?? a.trackCount ?? 0,
@@ -291,6 +329,29 @@ export default function Home() {
   const doneRowsNotSeen = useMemo<DoneRow[]>(() => {
     return doneRowsAll.filter((r) => r.seenMark === "✗");
   }, [doneRowsAll]);
+
+  function sortDoneRows(rows: DoneRow[]) {
+    const arr = [...rows];
+    arr.sort((a, b) => {
+      const dir = doneSortDir === "asc" ? 1 : -1;
+
+      if (doneSortKey === "artistName") {
+        return dir * a.artistName.localeCompare(b.artistName, undefined, { sensitivity: "base" });
+      }
+      if (doneSortKey === "seenMark") {
+        // put ✓ above ✗ when desc, or vice versa; tweak if you want
+        return dir * a.seenMark.localeCompare(b.seenMark);
+      }
+      // numeric keys
+      return dir * ((a as any)[doneSortKey] - (b as any)[doneSortKey]);
+    });
+    return arr;
+  }
+
+  const doneRowsAllSorted = useMemo(() => sortDoneRows(doneRowsAll), [doneRowsAll, doneSortKey, doneSortDir]);
+  const doneRowsSeenSorted = useMemo(() => sortDoneRows(doneRowsSeen), [doneRowsSeen, doneSortKey, doneSortDir]);
+  const doneRowsNotSeenSorted = useMemo(() => sortDoneRows(doneRowsNotSeen), [doneRowsNotSeen, doneSortKey, doneSortDir]);
+
 
 
 
@@ -473,7 +534,14 @@ export default function Home() {
   function exportListPDF(kind: "seen" | "notSeen") {
     if (!data) return;
 
-    const rows = kind === "seen" ? doneRowsSeen : doneRowsNotSeen;
+    function alphaRows(rows: DoneRow[]) {
+      return [...rows].sort((a, b) =>
+        a.artistName.localeCompare(b.artistName, undefined, { sensitivity: "base" })
+      );
+    }
+
+
+    const rows = kind === "seen" ? alphaRows(doneRowsSeen) : alphaRows(doneRowsNotSeen);
     const label = kind === "seen" ? "Seen" : "Not seen";
 
     const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -637,15 +705,24 @@ const notSeenArtists = useMemo(() => {
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>Artist</th>
-              <th style={styles.th}>Seen</th>
-              <th style={styles.th}>Tracks</th>
-              <th style={styles.th}>Playlists</th>
+              <th style={styles.th} onClick={() => toggleDoneSort("artistName")}>
+                Artist {doneSortKey === "artistName" ? (doneSortDir === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th style={styles.th} onClick={() => toggleDoneSort("seenMark")}>
+                Seen {doneSortKey === "seenMark" ? (doneSortDir === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th style={styles.th} onClick={() => toggleDoneSort("trackCount")}>
+                Tracks {doneSortKey === "trackCount" ? (doneSortDir === "asc" ? "▲" : "▼") : ""}
+              </th>
+              <th style={styles.th} onClick={() => toggleDoneSort("playlistCount")}>
+                Playlists {doneSortKey === "playlistCount" ? (doneSortDir === "asc" ? "▲" : "▼") : ""}
+              </th>
             </tr>
           </thead>
+
           <tbody>
             {rows.map((r) => (
-              <tr key={r.artistName}>
+              <tr key={r.artistId}>
                 <td style={{ padding: "10px 10px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                   <span style={{ overflowWrap: "anywhere" }}>{r.artistName}</span>
                 </td>
@@ -665,6 +742,7 @@ const notSeenArtists = useMemo(() => {
       </div>
     );
   }
+
 
 
   const swipeHandlers = useSwipeable({
@@ -905,23 +983,29 @@ const notSeenArtists = useMemo(() => {
                   <table style={{ ...styles.table, ...(isMobile ? styles.tableMobile : null) }}>
                     <thead>
                       <tr>
-                        <Th isMobile={isMobile} onClick={() => toggleSort("artistName")} active={sortKey === "artistName"}>
+                        <Th onClick={() => toggleSort("artistName")} active={sortKey === "artistName"} isMobile={isMobile}>
                           Artist {sortKey === "artistName" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
-                        <Th isMobile={isMobile}onClick={() => toggleSort("songCount")} active={sortKey === "songCount"}>
+
+                        <Th onClick={() => toggleSort("songCount")} active={sortKey === "songCount"} isMobile={isMobile}>
                           # songs {sortKey === "songCount" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
-                        <Th isMobile={isMobile} onClick={() => toggleSort("songPercent")} active={sortKey === "songPercent"}>
+
+                        <Th onClick={() => toggleSort("songPercent")} active={sortKey === "songPercent"} isMobile={isMobile}>
                           % songs {sortKey === "songPercent" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
-                        <Th isMobile={isMobile} onClick={() => toggleSort("playlistCount")} active={sortKey === "playlistCount"}>
+
+                        <Th onClick={() => toggleSort("playlistCount")} active={sortKey === "playlistCount"} isMobile={isMobile}>
                           # playlists {sortKey === "playlistCount" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
-                        <Th isMobile={isMobile} onClick={() => toggleSort("playlistPercent")} active={sortKey === "playlistPercent"}>
+
+                        <Th onClick={() => toggleSort("playlistPercent")} active={sortKey === "playlistPercent"} isMobile={isMobile}>
                           % playlists {sortKey === "playlistPercent" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
                       </tr>
                     </thead>
+
+
 
                     <tbody>
                       <tr style={{ fontWeight: 950 }}>
@@ -1082,7 +1166,7 @@ const notSeenArtists = useMemo(() => {
                     Same table as insights, plus “Seen”.
                   </div>
 
-                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsAll)}</div>
+                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsAllSorted)}</div>
                 </>
               )}
 
@@ -1101,7 +1185,7 @@ const notSeenArtists = useMemo(() => {
                     </button>
                   </div>
 
-                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsSeen)}</div>
+                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsSeenSorted)}</div>
                 </>
               )}
 
@@ -1120,7 +1204,7 @@ const notSeenArtists = useMemo(() => {
                     </button>
                   </div>
 
-                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsNotSeen)}</div>
+                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsNotSeenSorted)}</div>
                 </>
               )}
             </section>
