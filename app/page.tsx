@@ -121,6 +121,15 @@ function isProgressFileV1(x: any): x is ProgressFileV1 {
   );
 }
 
+function firstUndecidedIndex(artists: ArtistDeckItem[], decisions: Decisions) {
+  for (let i = 0; i < artists.length; i++) {
+    const id = artists[i].artistId;
+    if (decisions[id] !== true && decisions[id] !== false) return i;
+  }
+  return artists.length; // all decided
+}
+
+
 export default function Home() {
 
   const [isMobile, setIsMobile] = useState(false);
@@ -279,9 +288,16 @@ export default function Home() {
       setDecisions(restored.decisions ?? {});
       saveJSON(STORAGE_DECISIONS_KEY, restored.decisions ?? {});
 
-      const idx = safeNumber(restored.deckIndex, 0);
+      // Sort the restored artists the same way you do in the deck (A–Z)
+      const restoredArtistsSorted = [...(restored.data.artists ?? [])].sort((a, b) =>
+        a.artistName.localeCompare(b.artistName, undefined, { sensitivity: "base" })
+      );
+
+      // Use decisions to find where to resume
+      const idx = firstUndecidedIndex(restoredArtistsSorted, restored.decisions ?? {});
       setDeckIndex(idx);
       saveJSON(STORAGE_DECK_INDEX_KEY, idx);
+
 
       setInsightPage(safeNumber(restored.insightPage, 0));
       setMode(restored.mode === "deck" ? "deck" : "insights");
@@ -486,6 +502,14 @@ export default function Home() {
   function prevInsight() {
     setInsightPage((p) => Math.max(0, p - 1));
   }
+
+  function startSwiping() {
+    const idx = firstUndecidedIndex(deckArtistsSorted, decisions);
+    setDeckIndex(idx);
+    saveJSON(STORAGE_DECK_INDEX_KEY, idx);
+    setMode("deck");
+  }
+
 
   // ---------------------------
   // Table sorting
@@ -710,7 +734,7 @@ const notSeenArtists = useMemo(() => {
               Connect Spotify
             </button>
             <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={clickResumeUpload}>
-              Resume (upload JSON)
+              Resume (upload progress)
             </button>
           </div>
 
@@ -739,9 +763,13 @@ const notSeenArtists = useMemo(() => {
               <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={exportInsightsPDF}>
                 Save insights (PDF)
               </button>
-              <button style={{ ...styles.btnYes, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={() => setMode("deck")}>
+              <button
+                style={{ ...styles.btnYes, ...(isMobile ? styles.deckBtnMobile : null) }}
+                onClick={startSwiping}
+              >
                 Start swiping →
               </button>
+
             </div>
           </section>
 
@@ -913,7 +941,7 @@ const notSeenArtists = useMemo(() => {
 
                 <div style={{ ...styles.artistName, fontSize: isMobile ? 22 : 26 }}>{deckArtistsSorted[deckIndex]?.artistName}</div>
                 <div style={styles.trackCount}>
-                  {deckArtistsSorted[deckIndex]?.trackCount} unique songs in your playlists
+                  {deckArtistsSorted[deckIndex]?.trackCount} unique song(s) in your playlists
                 </div>
 
                 <div style={styles.hintRow}>
