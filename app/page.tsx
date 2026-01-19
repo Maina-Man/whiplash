@@ -346,9 +346,9 @@ export default function Home() {
     doc.setFontSize(12);
 
     const overviewRows = [
-      ["Unique tracks", String(data.totals.totalUniqueTracks)],
-      ["Unique artists", String(data.totals.totalArtists)],
-      ["Playlists scanned", String(data.totals.totalPlaylists)],
+      ["Unique songs", String(data.totals.totalUniqueTracks)],
+      ["Artists", String(data.totals.totalArtists)],
+      ["Playlists", String(data.totals.totalPlaylists)],
     ];
 
     autoTable(doc, {
@@ -436,7 +436,7 @@ export default function Home() {
     title("Whiplash — Live Shows Checklist");
     subtitle(new Date().toLocaleString(), topY + 18);
     subtitle(
-      `Playlists scanned: ${data.totals.totalPlaylists} • Unique artists: ${data.totals.totalArtists}`,
+      `Playlists: ${data.totals.totalPlaylists} • Artists: ${data.totals.totalArtists}`,
       topY + 34
     );
 
@@ -778,9 +778,9 @@ const notSeenArtists = useMemo(() => {
               <>
                 <div style={styles.h1}>Overview</div>
                 <div style={styles.kpiGrid}>
-                  <Kpi label="Unique tracks" value={totals?.totalUniqueTracks ?? 0} />
-                  <Kpi label="Unique artists" value={totals?.totalArtists ?? 0} />
-                  <Kpi label="Playlists scanned" value={totals?.totalPlaylists ?? 0} />
+                  <Kpi label="Unique songs" value={totals?.totalUniqueTracks ?? 0} />
+                  <Kpi label="Artists" value={totals?.totalArtists ?? 0} />
+                  <Kpi label="Playlists" value={totals?.totalPlaylists ?? 0} />
                 </div>
               </>
             )}
