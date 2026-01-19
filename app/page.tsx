@@ -122,6 +122,17 @@ function isProgressFileV1(x: any): x is ProgressFileV1 {
 }
 
 export default function Home() {
+
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
+  }, []);
+
   // data
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loadingScan, setLoadingScan] = useState(false);
@@ -369,6 +380,88 @@ export default function Home() {
     downloadBlob("whiplash-insights.pdf", blob);
   }
 
+  function exportSeenNotSeenPDF() {
+    if (!data) return;
+
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const marginX = 48;
+    const topY = 56;
+
+    function title(t: string) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.text(t, marginX, topY);
+    }
+
+    function subtitle(t: string, y: number) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(80);
+      doc.text(t, marginX, y);
+      doc.setTextColor(0);
+    }
+
+    title("Whiplash — Live Shows Checklist");
+    subtitle(new Date().toLocaleString(), topY + 18);
+    subtitle(
+      `Playlists scanned: ${data.totals.totalPlaylists} • Unique artists: ${data.totals.totalArtists}`,
+      topY + 34
+    );
+
+    // Helper to print a section with autotable and return last Y
+    function sectionTable(opts: {
+      heading: string;
+      rows: Array<{ artistName: string; trackCount: number }>;
+      startY: number;
+    }) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text(opts.heading, marginX, opts.startY);
+
+      autoTable(doc, {
+        startY: opts.startY + 12,
+        head: [["Artist", "Unique songs in playlists"]],
+        body: opts.rows.map((r) => [r.artistName, String(r.trackCount)]),
+        styles: { fontSize: 11 },
+        headStyles: { fillColor: [20, 20, 30] },
+        margin: { left: marginX, right: marginX },
+        // Keeps long names readable
+        columnStyles: { 0: { cellWidth: 320 }, 1: { cellWidth: 160 } },
+      });
+
+      // @ts-expect-error jspdf-autotable attaches lastAutoTable
+      return (doc as any).lastAutoTable?.finalY ?? opts.startY + 60;
+    }
+
+    // Seen section
+    let y = topY + 70;
+    y = sectionTable({
+      heading: `Seen (${seenArtists.length})`,
+      rows: seenArtists,
+      startY: y,
+    });
+
+    // If there's not enough space for the next section title + a few rows, start a new page
+    const pageHeight = doc.internal.pageSize.getHeight();
+    if (y > pageHeight - 140) {
+      doc.addPage();
+      y = topY;
+    } else {
+      y += 28;
+    }
+
+    // Not seen section
+    sectionTable({
+      heading: `Not seen (${notSeenArtists.length})`,
+      rows: notSeenArtists,
+      startY: y,
+    });
+
+    const blob = doc.output("blob");
+    downloadBlob("whiplash-live-status.pdf", blob);
+  }
+
+
   // ---------------------------
   // Insights navigation
   // ---------------------------
@@ -410,6 +503,24 @@ export default function Home() {
   // ---------------------------
   // Deck logic (uses alphabetical array)
   // ---------------------------
+  const seenArtists = useMemo(() => {
+    return deckArtistsSorted
+      .filter((a) => decisions[a.artistId] === true)
+      .map((a) => ({
+        artistName: a.artistName,
+        trackCount: a.trackCount,
+      }));
+  }, [deckArtistsSorted, decisions]);
+
+const notSeenArtists = useMemo(() => {
+    return deckArtistsSorted
+      .filter((a) => decisions[a.artistId] === false)
+      .map((a) => ({
+        artistName: a.artistName,
+        trackCount: a.trackCount,
+      }));
+  }, [deckArtistsSorted, decisions]);
+
   const deckDone = deckIndex >= deckArtistsSorted.length;
 
   const deckStats = useMemo(() => {
@@ -492,7 +603,7 @@ export default function Home() {
   const showLoading = loadingScan;
 
   return (
-    <main style={styles.page}>
+    <main style={{ ...styles.page, padding: isMobile ? 12 : 20 }}>
       {/* Hidden file input for resume */}
       <input
         ref={fileInputRef}
@@ -524,23 +635,22 @@ export default function Home() {
         </div>
       )}
 
-      <header style={styles.header}>
+      <header style={{ ...styles.header, ...(isMobile ? styles.headerMobile : null) }}>
         <div>
           <div style={styles.title}>Whiplash</div>
-          <div style={styles.subtitle}>Scan → insights → swipe (A–Z) → export progress anytime.</div>
         </div>
 
-        <div style={styles.headerRight}>
-          <button style={styles.smallBtn} onClick={exportProgress} disabled={!data}>
+        <div style={{ ...styles.headerRight, ...(isMobile ? styles.headerRightMobile : null) }}>
+          <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={exportProgress} disabled={!data}>
             Save progress
           </button>
-          <button style={styles.smallBtn} onClick={clickResumeUpload}>
+          <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={clickResumeUpload}>
             Resume
           </button>
           <a href="/api/auth/login" style={styles.link}>
             Re-login
           </a>
-          <button style={styles.smallBtn} onClick={scanSpotify} disabled={loadingScan}>
+          <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={scanSpotify} disabled={loadingScan}>
             Scan Spotify
           </button>
         </div>
@@ -566,10 +676,10 @@ export default function Home() {
           </div>
 
           <div style={{ marginTop: 18, display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
-            <button style={styles.btnYes} onClick={scanSpotify} disabled={loadingScan}>
+            <button style={{ ...styles.btnYes, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={scanSpotify} disabled={loadingScan}>
               Connect Spotify
             </button>
-            <button style={styles.smallBtn} onClick={clickResumeUpload}>
+            <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={clickResumeUpload}>
               Resume (upload JSON)
             </button>
           </div>
@@ -596,10 +706,10 @@ export default function Home() {
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button style={styles.smallBtn} onClick={exportInsightsPDF}>
+              <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={exportInsightsPDF}>
                 Save insights (PDF)
               </button>
-              <button style={styles.btnYes} onClick={() => setMode("deck")}>
+              <button style={{ ...styles.btnYes, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={() => setMode("deck")}>
                 Start swiping →
               </button>
             </div>
@@ -622,12 +732,12 @@ export default function Home() {
                 <div style={styles.h1}>Top 5 artists by songs</div>
                 <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                   {topSongs.map((x) => (
-                    <div key={x.artistId} style={{ ...styles.row, alignItems: "center" }}>
+                    <div key={x.artistId} style={{ ...styles.row, ...(isMobile ? styles.rowMobile : null), alignItems: "center" }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <Avatar url={x.imageUrl} size={34} />
                         <div style={{ fontWeight: 900 }}>{x.artistName}</div>
                       </div>
-                      <div style={{ opacity: 0.85 }}>
+                      <div style={{ opacity: 0.85, ...(isMobile ? { width: "100%" } : null) }}>
                         {x.value} • {pct1(x.percent)}%
                       </div>
                     </div>
@@ -641,12 +751,12 @@ export default function Home() {
                 <div style={styles.h1}>Top 5 artists by playlists</div>
                 <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                   {topPlaylists.map((x) => (
-                    <div key={x.artistId} style={{ ...styles.row, alignItems: "center" }}>
+                    <div key={x.artistId} style={{ ...styles.row, ...(isMobile ? styles.rowMobile : null), alignItems: "center" }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <Avatar url={x.imageUrl} size={34} />
                         <div style={{ fontWeight: 900 }}>{x.artistName}</div>
                       </div>
-                      <div style={{ opacity: 0.85 }}>
+                      <div style={{ opacity: 0.85, ...(isMobile ? { width: "100%" } : null) }}>
                         {x.value} • {pct1(x.percent)}%
                       </div>
                     </div>
@@ -660,7 +770,7 @@ export default function Home() {
                 <div style={styles.h1}>Top 5 tracks by playlist presence</div>
                 <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                   {topTracks.map((t) => (
-                    <div key={t.trackId} style={{ ...styles.row, alignItems: "center" }}>
+                    <div key={t.trackId} style={{ ...styles.row, ...(isMobile ? styles.rowMobile : null), alignItems: "center" }}>
                       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <Avatar url={t.mainArtistImageUrl} size={34} />
                         <div>
@@ -668,7 +778,7 @@ export default function Home() {
                           <div style={{ opacity: 0.75, fontSize: 12 }}>{t.mainArtistName}</div>
                         </div>
                       </div>
-                      <div style={{ opacity: 0.85 }}>
+                      <div style={{ opacity: 0.85, ...(isMobile ? { width: "100%" } : null) }}>
                         {t.playlistCount} • {pct1(t.percent)}%
                       </div>
                     </div>
@@ -685,22 +795,22 @@ export default function Home() {
                 </div>
 
                 <div style={styles.tableWrap}>
-                  <table style={styles.table}>
+                  <table style={{ ...styles.table, ...(isMobile ? styles.tableMobile : null) }}>
                     <thead>
                       <tr>
-                        <Th onClick={() => toggleSort("artistName")} active={sortKey === "artistName"}>
+                        <Th isMobile={isMobile} onClick={() => toggleSort("artistName")} active={sortKey === "artistName"}>
                           Artist {sortKey === "artistName" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
-                        <Th onClick={() => toggleSort("songCount")} active={sortKey === "songCount"}>
+                        <Th isMobile={isMobile}onClick={() => toggleSort("songCount")} active={sortKey === "songCount"}>
                           # songs {sortKey === "songCount" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
-                        <Th onClick={() => toggleSort("songPercent")} active={sortKey === "songPercent"}>
+                        <Th isMobile={isMobile} onClick={() => toggleSort("songPercent")} active={sortKey === "songPercent"}>
                           % songs {sortKey === "songPercent" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
-                        <Th onClick={() => toggleSort("playlistCount")} active={sortKey === "playlistCount"}>
+                        <Th isMobile={isMobile} onClick={() => toggleSort("playlistCount")} active={sortKey === "playlistCount"}>
                           # playlists {sortKey === "playlistCount" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
-                        <Th onClick={() => toggleSort("playlistPercent")} active={sortKey === "playlistPercent"}>
+                        <Th isMobile={isMobile} onClick={() => toggleSort("playlistPercent")} active={sortKey === "playlistPercent"}>
                           % playlists {sortKey === "playlistPercent" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                         </Th>
                       </tr>
@@ -735,10 +845,10 @@ export default function Home() {
           </section>
 
           <section style={styles.navRow}>
-            <button style={styles.smallBtn} onClick={prevInsight} disabled={insightPage === 0}>
+            <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={prevInsight} disabled={insightPage === 0}>
               ← Back
             </button>
-            <button style={styles.smallBtn} onClick={nextInsight} disabled={insightPage === insightTotalPages - 1}>
+            <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={nextInsight} disabled={insightPage === insightTotalPages - 1}>
               Next →
             </button>
           </section>
@@ -748,7 +858,7 @@ export default function Home() {
       {/* DECK */}
       {data && mode === "deck" && (
         <>
-          <section style={styles.statsRow}>
+          <section style={{ ...styles.statsRow, ...(isMobile ? styles.statsRowMobile : null) }}>
             <Stat label="Artists" value={deckStats.total} />
             <Stat label="Seen" value={`${deckStats.seen} (${deckStats.seenPct}%)`} />
             <Stat label="Not seen" value={`${deckStats.notSeen} (${deckStats.notSeenPct}%)`} />
@@ -756,17 +866,22 @@ export default function Home() {
           </section>
 
           {!deckDone ? (
-            <section style={styles.deckWrap}>
+            <section
+              style={{
+                ...styles.deckWrap,
+                paddingBottom: isMobile ? 84 : 0,
+              }}
+            >
               <div style={styles.progress}>
                 {deckIndex + 1} / {deckArtistsSorted.length} (A–Z)
               </div>
 
               <div {...swipeHandlers} style={styles.cardBig}>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-                  <Avatar url={deckArtistsSorted[deckIndex]?.imageUrl} size={110} />
+                  <Avatar url={deckArtistsSorted[deckIndex]?.imageUrl} size={isMobile ? 92 : 110} />
                 </div>
 
-                <div style={styles.artistName}>{deckArtistsSorted[deckIndex]?.artistName}</div>
+                <div style={{ ...styles.artistName, fontSize: isMobile ? 22 : 26 }}>{deckArtistsSorted[deckIndex]?.artistName}</div>
                 <div style={styles.trackCount}>
                   {deckArtistsSorted[deckIndex]?.trackCount} unique songs in your playlists
                 </div>
@@ -777,20 +892,20 @@ export default function Home() {
                 </div>
               </div>
 
-              <div style={styles.btnRow}>
-                <button style={styles.btnNo} onClick={() => markCurrent(false)}>
+              <div style={{ ...styles.btnRow, ...(isMobile ? styles.deckBottomBar : null) }}>
+                <button style={{ ...styles.btnNo, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={() => markCurrent(false)}>
                   Not seen (←)
                 </button>
-                <button style={styles.btnUndo} onClick={undoDeck} disabled={deckIndex === 0}>
+                <button style={{ ...styles.btnUndo, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={undoDeck} disabled={deckIndex === 0}>
                   Undo (⌫)
                 </button>
-                <button style={styles.btnYes} onClick={() => markCurrent(true)}>
+                <button style={{ ...styles.btnYes, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={() => markCurrent(true)}>
                   Seen (→)
                 </button>
               </div>
 
               <div style={{ marginTop: 10 }}>
-                <button style={styles.smallBtn} onClick={() => setMode("insights")}>
+                <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={() => setMode("insights")}>
                   ← Back to insights
                 </button>
                 <button style={{ ...styles.smallBtn, marginLeft: 10 }} onClick={resetDeck}>
@@ -805,18 +920,23 @@ export default function Home() {
                 Seen: <b>{deckStats.seen}</b> • Not seen: <b>{deckStats.notSeen}</b> • Total:{" "}
                 <b>{deckStats.total}</b>
               </div>
-              <div style={styles.btnRow}>
-                <button style={styles.btnUndo} onClick={undoDeck} disabled={deckArtistsSorted.length === 0}>
+              <div style={{ ...styles.btnRow, ...(isMobile ? styles.deckBottomBar : null) }}>
+                <button style={{ ...styles.btnUndo, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={undoDeck} disabled={deckArtistsSorted.length === 0}>
                   Review last
                 </button>
-                <button style={styles.btnNo} onClick={resetDeck}>
+
+                <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={exportSeenNotSeenPDF}>
+                  Download seen / not seen (PDF)
+                </button>
+
+                <button style={{ ...styles.btnNo, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={resetDeck}>
                   Reset swipes
                 </button>
               </div>
+
             </section>
           )}
 
-          <section style={styles.footerNote}>Deck shortcuts: ← / → decide • Backspace undo.</section>
         </>
       )}
     </main>
@@ -872,16 +992,19 @@ function Th({
   children,
   onClick,
   active,
+  isMobile,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   active?: boolean;
+  isMobile?: boolean;
 }) {
   return (
     <th
       onClick={onClick}
       style={{
         ...styles.th,
+        ...(isMobile ? { padding: "8px 8px", fontSize: 12 } : null),
         opacity: active ? 1 : 0.85,
       }}
     >
@@ -889,6 +1012,7 @@ function Th({
     </th>
   );
 }
+
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
@@ -906,9 +1030,29 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 16,
     flexWrap: "wrap",
   },
+
+  headerMobile: {
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+    padding: 12,
+    margin: -20,
+    marginBottom: 12,
+    background: "rgba(11,11,15,0.85)",
+    backdropFilter: "blur(10px)",
+    borderBottom: "1px solid rgba(255,255,255,0.08)",
+  },
   title: { fontSize: 22, fontWeight: 900, letterSpacing: -0.3 },
   subtitle: { opacity: 0.8, marginTop: 4, fontSize: 13 },
   headerRight: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" },
+
+  headerRightMobile: {
+    width: "100%",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 8,
+    alignItems: "stretch",
+  },
   link: { color: "#9ad", textDecoration: "none", fontSize: 13 },
 
   modeBar: {
@@ -940,12 +1084,34 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
   },
 
+  smallBtnMobile: {
+    padding: "12px 12px",
+    borderRadius: 14,
+    fontSize: 14,
+    width: "100%",
+  },
+
+  deckBtnMobile: {
+    padding: "14px 14px",
+    borderRadius: 16,
+    fontSize: 15,
+    flex: 1,
+    minWidth: 0,
+  },
+
   statsRow: {
     display: "grid",
     gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     gap: 10,
     marginBottom: 16,
   },
+
+  statsRowMobile: {
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 8,
+    marginBottom: 12,
+  },
+
   statBox: {
     borderRadius: 14,
     padding: 12,
@@ -1013,11 +1179,15 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 10,
     maxHeight: "52vh",
     overflow: "auto",
+    WebkitOverflowScrolling: "touch",
     borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.10)",
     background: "rgba(0,0,0,0.20)",
   },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+
+  tableMobile: { fontSize: 12 },
+
   th: {
     position: "sticky",
     top: 0,
@@ -1043,6 +1213,20 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.7,
     fontSize: 12,
   },
+
+  deckBottomBar: {
+    position: "fixed",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 12,
+    background: "rgba(11,11,15,0.9)",
+    backdropFilter: "blur(12px)",
+    borderTop: "1px solid rgba(255,255,255,0.10)",
+    gap: 10,
+    zIndex: 60,
+  },
+
 
   btnRow: { display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" },
   btnNo: {
