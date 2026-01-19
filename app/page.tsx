@@ -1053,12 +1053,15 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     zIndex: 50,
     padding: 12,
-    margin: -20,
+    marginLeft: -12,   // ✅ match the mobile padding you set in <main>
+    marginRight: -12,  // ✅
+    marginTop: -12,
     marginBottom: 12,
     background: "rgba(11,11,15,0.85)",
     backdropFilter: "blur(10px)",
     borderBottom: "1px solid rgba(255,255,255,0.08)",
   },
+
   title: { fontSize: 22, fontWeight: 900, letterSpacing: -0.3 },
   subtitle: { opacity: 0.8, marginTop: 4, fontSize: 13 },
   headerRight: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" },
