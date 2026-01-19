@@ -1150,7 +1150,8 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "0 auto",
   },
   cardBig: {
-    width: "min(820px, 96vw)",
+    width: "min(820px, 100%)",
+    maxWidth: "100%",
     borderRadius: 22,
     padding: 18,
     border: "1px solid rgba(255,255,255,0.14)",
