@@ -133,6 +133,9 @@ function firstUndecidedIndex(artists: ArtistDeckItem[], decisions: Decisions) {
 export default function Home() {
 
   const [isMobile, setIsMobile] = useState(false);
+  const [doneView, setDoneView] = useState<"celebrate" | "results" | "seen" | "notSeen">(
+    "celebrate"
+  );
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 640px)");
@@ -235,6 +238,61 @@ export default function Home() {
     );
     return arr;
   }, [data]);
+
+  const artistMetaById = useMemo(() => {
+    const m = new Map<string, { trackCount: number; playlistCount: number }>();
+
+    // trackCount from deck list
+    for (const a of deckArtistsSorted) {
+      m.set(a.artistId, { trackCount: a.trackCount, playlistCount: 0 });
+    }
+
+    // playlistCount from artistTable
+    for (const r of table) {
+      const prev = m.get(r.artistId);
+      m.set(r.artistId, {
+        trackCount: prev?.trackCount ?? 0,
+        playlistCount: r.playlistCount ?? 0,
+      });
+    }
+
+    return m;
+  }, [deckArtistsSorted, table]);
+
+  type DoneRow = {
+    artistName: string;
+    seenMark: "✓" | "✗";
+    trackCount: number;
+    playlistCount: number;
+  };
+
+  const doneRowsAll = useMemo<DoneRow[]>(() => {
+    return deckArtistsSorted.map((a) => {
+      const meta = artistMetaById.get(a.artistId);
+      const seen = decisions[a.artistId] === true;
+      const notSeen = decisions[a.artistId] === false;
+
+      // if somehow undecided at "done", treat as ✗
+      const mark: "✓" | "✗" = seen ? "✓" : "✗";
+
+      return {
+        artistName: a.artistName,
+        seenMark: mark,
+        trackCount: meta?.trackCount ?? a.trackCount ?? 0,
+        playlistCount: meta?.playlistCount ?? 0,
+      };
+    });
+  }, [deckArtistsSorted, decisions, artistMetaById]);
+
+  const doneRowsSeen = useMemo<DoneRow[]>(() => {
+    return doneRowsAll.filter((r) => r.seenMark === "✓");
+  }, [doneRowsAll]);
+
+  const doneRowsNotSeen = useMemo<DoneRow[]>(() => {
+    return doneRowsAll.filter((r) => r.seenMark === "✗");
+  }, [doneRowsAll]);
+
+
 
   // Keep deckIndex sane when data changes
   useEffect(() => {
@@ -412,85 +470,40 @@ export default function Home() {
     downloadBlob("whiplash-insights.pdf", blob);
   }
 
-  function exportSeenNotSeenPDF() {
+  function exportListPDF(kind: "seen" | "notSeen") {
     if (!data) return;
+
+    const rows = kind === "seen" ? doneRowsSeen : doneRowsNotSeen;
+    const label = kind === "seen" ? "Seen" : "Not seen";
 
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const marginX = 48;
     const topY = 56;
 
-    function title(t: string) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(18);
-      doc.text(t, marginX, topY);
-    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text(`Whiplash — ${label} artists`, marginX, topY);
 
-    function subtitle(t: string, y: number) {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11);
-      doc.setTextColor(80);
-      doc.text(t, marginX, y);
-      doc.setTextColor(0);
-    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(80);
+    doc.text(new Date().toLocaleString(), marginX, topY + 18);
+    doc.setTextColor(0);
 
-    title("Whiplash — Live Shows Checklist");
-    subtitle(new Date().toLocaleString(), topY + 18);
-    subtitle(
-      `Playlists: ${data.totals.totalPlaylists} • Artists: ${data.totals.totalArtists}`,
-      topY + 34
-    );
-
-    // Helper to print a section with autotable and return last Y
-    function sectionTable(opts: {
-      heading: string;
-      rows: Array<{ artistName: string; trackCount: number }>;
-      startY: number;
-    }) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text(opts.heading, marginX, opts.startY);
-
-      autoTable(doc, {
-        startY: opts.startY + 12,
-        head: [["Artist", "Unique songs in playlists"]],
-        body: opts.rows.map((r) => [r.artistName, String(r.trackCount)]),
-        styles: { fontSize: 11 },
-        headStyles: { fillColor: [20, 20, 30] },
-        margin: { left: marginX, right: marginX },
-        // Keeps long names readable
-        columnStyles: { 0: { cellWidth: 320 }, 1: { cellWidth: 160 } },
-      });
-
-      return (doc as any).lastAutoTable?.finalY ?? opts.startY + 60;
-    }
-
-    // Seen section
-    let y = topY + 70;
-    y = sectionTable({
-      heading: `Seen (${seenArtists.length})`,
-      rows: seenArtists,
-      startY: y,
-    });
-
-    // If there's not enough space for the next section title + a few rows, start a new page
-    const pageHeight = doc.internal.pageSize.getHeight();
-    if (y > pageHeight - 140) {
-      doc.addPage();
-      y = topY;
-    } else {
-      y += 28;
-    }
-
-    // Not seen section
-    sectionTable({
-      heading: `Not seen (${notSeenArtists.length})`,
-      rows: notSeenArtists,
-      startY: y,
+    autoTable(doc, {
+      startY: topY + 40,
+      head: [["Artist", "Seen", "Tracks", "Playlists"]],
+      body: rows.map((r) => [r.artistName, r.seenMark, String(r.trackCount), String(r.playlistCount)]),
+      styles: { fontSize: 11 },
+      headStyles: { fillColor: [20, 20, 30] },
+      margin: { left: marginX, right: marginX },
+      columnStyles: { 0: { cellWidth: 260 } },
     });
 
     const blob = doc.output("blob");
-    downloadBlob("whiplash-live-status.pdf", blob);
+    downloadBlob(`whiplash-${kind === "seen" ? "seen" : "not-seen"}-artists.pdf`, blob);
   }
+
 
 
   // ---------------------------
@@ -617,6 +630,42 @@ const notSeenArtists = useMemo(() => {
     setDecisions({});
     setDeckIndex(0);
   }
+
+  function renderDoneTable(rows: DoneRow[]) {
+    return (
+      <div style={styles.tableWrap}>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>Artist</th>
+              <th style={styles.th}>Seen</th>
+              <th style={styles.th}>Tracks</th>
+              <th style={styles.th}>Playlists</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.artistName}>
+                <td style={{ padding: "10px 10px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  <span style={{ overflowWrap: "anywhere" }}>{r.artistName}</span>
+                </td>
+                <td style={{ padding: "10px 10px", borderBottom: "1px solid rgba(255,255,255,0.08)", fontWeight: 900 }}>
+                  {r.seenMark}
+                </td>
+                <td style={{ padding: "10px 10px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  {r.trackCount}
+                </td>
+                <td style={{ padding: "10px 10px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                  {r.playlistCount}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => markCurrent(false),
@@ -972,27 +1021,110 @@ const notSeenArtists = useMemo(() => {
               </div>
             </section>
           ) : (
-            <section style={styles.card}>
-              <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 8 }}>Done 🎉</div>
-              <div style={{ marginBottom: 14 }}>
-                Seen: <b>{deckStats.seen}</b> • Not seen: <b>{deckStats.notSeen}</b> • Total:{" "}
-                <b>{deckStats.total}</b>
-              </div>
-              <div style={{ ...styles.btnRow, ...(isMobile ? styles.deckBottomBar : null) }}>
-                <button style={{ ...styles.btnUndo, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={undoDeck} disabled={deckArtistsSorted.length === 0}>
-                  Review last
-                </button>
+            <section style={styles.cardBig}>
+              {/* keep stats at the top (you already render statsRow above this section) */}
 
-                <button style={{ ...styles.smallBtn, ...(isMobile ? styles.smallBtnMobile : null) }} onClick={exportSeenNotSeenPDF}>
-                  Download seen / not seen (PDF)
-                </button>
+              {doneView === "celebrate" && (
+                <div style={{ textAlign: "center" }}>
+                  <img
+                    src="/dance.gif"
+                    alt="Congrats"
+                    style={{
+                      width: "min(260px, 70vw)",
+                      height: "auto",
+                      objectFit: "contain",
+                      filter: "drop-shadow(0 10px 30px rgba(0,0,0,0.4))",
+                      borderRadius: 14,
+                    }}
+                  />
+                  <div style={{ marginTop: 14, fontSize: 22, fontWeight: 950, letterSpacing: -0.2 }}>
+                    Congratulations, you did it!
+                  </div>
+                  <div style={{ marginTop: 8, opacity: 0.8 }}>
+                    You marked <b>{deckStats.seen}</b> seen and <b>{deckStats.notSeen}</b> not seen.
+                  </div>
 
-                <button style={{ ...styles.btnNo, ...(isMobile ? styles.deckBtnMobile : null) }} onClick={resetDeck}>
-                  Reset swipes
-                </button>
-              </div>
+                  <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
+                    <button style={styles.btnYes} onClick={() => setDoneView("results")}>
+                      Show results
+                    </button>
 
+                    <button style={styles.smallBtn} onClick={() => setDoneView("seen")}>
+                      View / download seen list
+                    </button>
+
+                    <button style={styles.smallBtn} onClick={() => setDoneView("notSeen")}>
+                      View / download not seen list
+                    </button>
+
+                    <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                      <button style={styles.btnUndo} onClick={undoDeck} disabled={deckArtistsSorted.length === 0}>
+                        Review last
+                      </button>
+                      <button style={styles.btnNo} onClick={resetDeck}>
+                        Reset swipes
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {doneView === "results" && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div style={styles.h1}>Results</div>
+                    <button style={styles.smallBtn} onClick={() => setDoneView("celebrate")}>
+                      ← Back
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: 10, opacity: 0.8, fontSize: 13 }}>
+                    Same table as insights, plus “Seen”.
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsAll)}</div>
+                </>
+              )}
+
+              {doneView === "seen" && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div style={styles.h1}>Seen artists</div>
+                    <button style={styles.smallBtn} onClick={() => setDoneView("celebrate")}>
+                      ← Back
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button style={styles.smallBtn} onClick={() => exportListPDF("seen")}>
+                      Download PDF
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsSeen)}</div>
+                </>
+              )}
+
+              {doneView === "notSeen" && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div style={styles.h1}>Not seen artists</div>
+                    <button style={styles.smallBtn} onClick={() => setDoneView("celebrate")}>
+                      ← Back
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button style={styles.smallBtn} onClick={() => exportListPDF("notSeen")}>
+                      Download PDF
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>{renderDoneTable(doneRowsNotSeen)}</div>
+                </>
+              )}
             </section>
+
           )}
 
         </>
