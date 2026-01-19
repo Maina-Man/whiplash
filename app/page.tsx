@@ -165,17 +165,32 @@ export default function Home() {
   async function scanSpotify() {
     setLoadingScan(true);
     setError(null);
+
     try {
       const r = await fetch("/api/spotify/artists", { cache: "no-store" });
+
+      // If your API returns 401 when not logged in
+      if (r.status === 401) {
+        window.location.href = "/api/auth/login";
+        return;
+      }
+
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
+
+        // If your API returns { error: "not_authenticated" }
+        if (j?.error === "not_authenticated") {
+          window.location.href = "/api/auth/login";
+          return;
+        }
+
         throw new Error(j?.error || `HTTP ${r.status}`);
       }
+
       const j = (await r.json()) as ApiResponse;
       setData(j);
       saveJSON(STORAGE_SNAPSHOT_KEY, j);
 
-      // Clamp deckIndex
       setDeckIndex((prev) => {
         const clamped = Math.min(prev, j.artists.length);
         saveJSON(STORAGE_DECK_INDEX_KEY, clamped);
@@ -191,6 +206,7 @@ export default function Home() {
       setLoadingScan(false);
     }
   }
+
 
   // ---------------------------
   // Derived data
@@ -1020,6 +1036,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
     background: "#0b0b0f",
     color: "#fff",
+    overflowX: "hidden",     // ✅ key
+    boxSizing: "border-box",
   },
   header: {
     display: "flex",
