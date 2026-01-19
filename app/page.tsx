@@ -1112,7 +1112,7 @@ const notSeenArtists = useMemo(() => {
                 <div style={{ textAlign: "center" }}>
                   <img
                     src="/dance.gif"
-                    alt="Dancing Greg"
+                    alt="Dancing Greg :)"
                     style={{
                       width: "min(260px, 70vw)",
                       height: "auto",
