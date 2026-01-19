@@ -24,27 +24,28 @@ export async function getAccessToken(): Promise<string | null> {
 
 export async function fetchAllPlaylists(token: string) {
   const out: any[] = [];
-  let url = "https://api.spotify.com/v1/me/playlists?limit=50";
+  let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
 
   while (url) {
     const page = (await spotifyFetch(url, token)) as Paging<any>;
     out.push(...page.items);
-    url = page.next;
+    url = page.next ?? null;
   }
   return out;
 }
 
 export async function fetchAllPlaylistTracks(token: string, playlistId: string) {
   const out: any[] = [];
-  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+  let url: string | null = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
 
   while (url) {
     const page = (await spotifyFetch(url, token)) as Paging<any>;
     out.push(...page.items);
-    url = page.next;
+    url = page.next ?? null;
   }
   return out;
 }
+
 
 export async function fetchArtistsByIds(token: string, ids: string[]) {
   const out: any[] = [];
